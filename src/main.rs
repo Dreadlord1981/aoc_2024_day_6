@@ -1,5 +1,7 @@
+use std::sync::Mutex;
 use std::{collections::HashMap, fs};
 use std::time::Instant;
+use rayon::prelude::*;
 
 #[derive(Debug, Default, Clone)]
 struct Map {
@@ -7,6 +9,11 @@ struct Map {
 	height: usize,
 	rows: Vec<String>,
 	walls: HashMap<(usize, usize), i32>
+}
+
+struct Point {
+	x: i32,
+	y: i32
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone, Copy)]
@@ -39,26 +46,26 @@ fn main() {
 
 	let now = Instant::now();
 
-	let mut count = 0;
+	let results = Mutex::new(0);
 
-	for (x, y) in visited.iter() {
-
+	visited.par_iter().for_each(|p| {
 
 		let mut guard = guard_clone.clone();
 		let mut map = map_clone.clone();
 
-		map.walls.insert((*x as usize, *y as usize), 0);
+		map.walls.insert((p.x as usize, p.y as usize), 0);
 		
 		let is_loop = is_loop(&mut map, &mut guard);
 
 		if is_loop {
-			count += 1;
+			*results.lock().unwrap() += 1;
 		}
-	}
+		
+	});
 
 	let elapsed = now.elapsed();
 	
-	println!("Part 2: {count}");
+	println!("Part 2: {}", results.lock().unwrap());
     println!("Elapsed Part 2: {:.2?}", elapsed);
 
 }
@@ -120,12 +127,12 @@ fn init(input: &str) -> Result<(Map, Guard), ()> {
 	}, guard))
 }
 
-fn find_path(map: &mut Map, guard: &mut Guard) -> Vec<(i32, i32)> {
+fn find_path(map: &mut Map, guard: &mut Guard) -> Vec<Point> {
 
 	let width = map.width;
 	let height = map.height;
 
-	let mut steps = vec![( guard.x,  guard.y)];
+	let mut steps = vec![Point{x: guard.x, y: guard.y}];
 
 	loop {
 
@@ -157,9 +164,9 @@ fn find_path(map: &mut Map, guard: &mut Guard) -> Vec<(i32, i32)> {
 			guard.y = next_y;
 			guard.x = next_x;
 
-			if !steps.contains(&(next_x, next_y)) {
+			if !steps.iter().any(|p| p.x == next_x && p.y == next_y) {
 
-				steps.push((next_x, next_y));
+				steps.push(Point{x: next_x, y: next_y});
 
 				let row = &row.chars().enumerate().map(|(i, c)| {
 
